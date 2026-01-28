@@ -1,20 +1,21 @@
 import os
 import json
-from datetime import datetime, time
+from datetime import datetime
 import pytz
+import asyncio
 
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 from apscheduler.schedulers.background import BackgroundScheduler
 
-# Arquivos
+# ---------------- CONFIG ----------------
+
 ARQUIVO = "tempos.json"
 HISTORICO = "historico.json"
-
-# Token vem do Railway (variável de ambiente)
 TOKEN = os.getenv("BOT_TOKEN")
+FUSO = pytz.timezone("America/Sao_Paulo")
 
-# ----------------- Funções utilitárias -----------------
+# ---------------- UTIL ----------------
 
 def carregar():
     if os.path.exists(ARQUIVO):
@@ -41,7 +42,7 @@ def tempo_para_ms(t):
     s, ms = resto.split(".")
     return (int(m)*60 + int(s))*1000 + int(ms)
 
-# ----------------- Regras -----------------
+# ---------------- REGRAS ----------------
 
 async def eh_admin(update: Update):
     chat = update.effective_chat
@@ -49,7 +50,7 @@ async def eh_admin(update: Update):
     membros = await chat.get_administrators()
     return any(m.user.id == user.id for m in membros)
 
-# ----------------- Comandos -----------------
+# ---------------- COMANDOS ----------------
 
 async def pista(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await eh_admin(update):
@@ -151,12 +152,12 @@ async def historico_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(texto, parse_mode="Markdown")
 
-# ----------------- Reset semanal -----------------
+# ---------------- RESET SEMANAL ----------------
 
-async def reset_semanal(context: ContextTypes.DEFAULT_TYPE):
+async def reset_semanal(app):
     dados = carregar()
     historico = carregar_historico()
-    data = datetime.now().strftime("%d/%m/%Y")
+    data = datetime.now(FUSO).strftime("%d/%m/%Y")
 
     for chat_id, conteudo in dados.items():
         pista = conteudo.get("pista_atual")
@@ -169,7 +170,7 @@ async def reset_semanal(context: ContextTypes.DEFAULT_TYPE):
                     "pista": pista,
                     "ranking": ranking
                 })
-                await context.bot.send_message(
+                await app.bot.send_message(
                     chat_id=chat_id,
                     text=f"🔄 Evento encerrado!\nPista: {pista}\nHistórico salvo."
                 )
@@ -178,7 +179,7 @@ async def reset_semanal(context: ContextTypes.DEFAULT_TYPE):
     salvar(dados)
     salvar_historico(historico)
 
-# ----------------- Inicialização -----------------
+# ---------------- MAIN ----------------
 
 def main():
     app = ApplicationBuilder().token(TOKEN).build()
@@ -188,12 +189,15 @@ def main():
     app.add_handler(CommandHandler("rank", rank))
     app.add_handler(CommandHandler("historico", historico_cmd))
 
-    fuso = pytz.timezone("America/Sao_Paulo")
-    app.job_queue.run_daily(
-        reset_semanal,
-        time=time(hour=9, minute=0, tzinfo=fuso),
-        days=(5,)  # sábado
+    scheduler = BackgroundScheduler(timezone=FUSO)
+    scheduler.add_job(
+        lambda: asyncio.run(reset_semanal(app)),
+        "cron",
+        day_of_week="sat",
+        hour=9,
+        minute=0
     )
+    scheduler.start()
 
     print("Bot iniciado...")
     app.run_polling()
