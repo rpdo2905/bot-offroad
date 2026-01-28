@@ -5,6 +5,7 @@ import pytz
 
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+from apscheduler.schedulers.background import BackgroundScheduler
 
 # Arquivos
 ARQUIVO = "tempos.json"
