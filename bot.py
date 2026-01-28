@@ -10,188 +10,211 @@ from apscheduler.schedulers.background import BackgroundScheduler
 
 # ---------------- CONFIG ----------------
 
-ARQUIVO = "tempos.json"
-HISTORICO = "historico.json"
+DATA_FILE = "tempos.json"
+HISTORY_FILE = "historico.json"
 TOKEN = os.getenv("BOT_TOKEN")
-FUSO = pytz.timezone("America/Sao_Paulo")
+TIMEZONE = pytz.timezone("America/Sao_Paulo")
 
 # ---------------- UTIL ----------------
 
-def carregar():
-    if os.path.exists(ARQUIVO):
-        with open(ARQUIVO, "r") as f:
+def load_data():
+    if os.path.exists(DATA_FILE):
+        with open(DATA_FILE, "r") as f:
             return json.load(f)
     return {}
 
-def salvar(dados):
-    with open(ARQUIVO, "w") as f:
-        json.dump(dados, f, indent=2)
+def save_data(data):
+    with open(DATA_FILE, "w") as f:
+        json.dump(data, f, indent=2)
 
-def carregar_historico():
-    if os.path.exists(HISTORICO):
-        with open(HISTORICO, "r") as f:
+def load_history():
+    if os.path.exists(HISTORY_FILE):
+        with open(HISTORY_FILE, "r") as f:
             return json.load(f)
     return {}
 
-def salvar_historico(dados):
-    with open(HISTORICO, "w") as f:
-        json.dump(dados, f, indent=2)
+def save_history(data):
+    with open(HISTORY_FILE, "w") as f:
+        json.dump(data, f, indent=2)
 
-def tempo_para_ms(t):
-    m, resto = t.split(":")
-    s, ms = resto.split(".")
+def time_to_ms(t):
+    m, rest = t.split(":")
+    s, ms = rest.split(".")
     return (int(m)*60 + int(s))*1000 + int(ms)
 
-# ---------------- REGRAS ----------------
+# ---------------- RULES ----------------
 
-async def eh_admin(update: Update):
+async def is_admin(update: Update):
     chat = update.effective_chat
     user = update.effective_user
-    membros = await chat.get_administrators()
-    return any(m.user.id == user.id for m in membros)
+    members = await chat.get_administrators()
+    return any(m.user.id == user.id for m in members)
 
-# ---------------- COMANDOS ----------------
+# ---------------- COMMANDS ----------------
 
-async def pista(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not await eh_admin(update):
+async def track(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await is_admin(update):
         return
 
     chat_id = str(update.effective_chat.id)
-    nome_pista = " ".join(context.args)
+    track_name = " ".join(context.args)
 
-    if not nome_pista:
-        await update.message.reply_text("Uso:\n/pista Nome da pista")
+    if not track_name:
+        await update.message.reply_text("Usage:\n/track Track name")
         return
 
-    dados = carregar()
-    dados.setdefault(chat_id, {})
-    dados[chat_id]["pista_atual"] = nome_pista
-    dados[chat_id].setdefault(nome_pista, {})
+    data = load_data()
+    data.setdefault(chat_id, {})
+    data[chat_id]["current_track"] = track_name
+    data[chat_id].setdefault(track_name, {})
 
-    salvar(dados)
+    save_data(data)
     await update.message.reply_text(
-        f"🏁 Pista atual definida:\n*{nome_pista}*",
+        f"🏁 Current track set:\n*{track_name}*",
         parse_mode="Markdown"
     )
 
-async def tempo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not await eh_admin(update):
+async def time_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await is_admin(update):
         return
 
     chat_id = str(update.effective_chat.id)
 
     try:
-        nome = context.args[0]
-        tempo_str = context.args[1]
-        ms = tempo_para_ms(tempo_str)
+        name = context.args[0]
+        time_str = context.args[1]
+        ms = time_to_ms(time_str)
 
-        dados = carregar()
-        pista_atual = dados.get(chat_id, {}).get("pista_atual")
+        data = load_data()
+        current_track = data.get(chat_id, {}).get("current_track")
 
-        if not pista_atual:
+        if not current_track:
             await update.message.reply_text(
-                "Defina a pista primeiro:\n/pista Nome da pista"
+                "Set a track first:\n/track Track name"
             )
             return
 
-        ranking = dados[chat_id][pista_atual]
+        ranking = data[chat_id][current_track]
 
-        if nome not in ranking or ms < ranking[nome]["ms"]:
-            ranking[nome] = {"tempo": tempo_str, "ms": ms}
-            salvar(dados)
+        if name not in ranking or ms < ranking[name]["ms"]:
+            ranking[name] = {"time": time_str, "ms": ms}
+            save_data(data)
             await update.message.reply_text(
-                f"✅ Tempo registrado:\n{nome} ⏱️ {tempo_str}"
+                f"✅ Time registered:\n{name} ⏱️ {time_str}"
             )
         else:
             await update.message.reply_text(
-                f"⛔ Tempo maior que o atual.\nMelhor de {nome}: {ranking[nome]['tempo']}"
+                f"⛔ Slower than current.\nBest of {name}: {ranking[name]['time']}"
             )
     except:
-        await update.message.reply_text("Uso correto:\n/tempo Nome 1:18.732")
+        await update.message.reply_text("Usage:\n/time Name 1:18.732")
 
 async def rank(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = str(update.effective_chat.id)
-    dados = carregar()
-    pista_atual = dados.get(chat_id, {}).get("pista_atual")
+    data = load_data()
+    current_track = data.get(chat_id, {}).get("current_track")
 
-    if not pista_atual:
-        await update.message.reply_text("Nenhuma pista definida.")
+    if not current_track:
+        await update.message.reply_text("No track defined.")
         return
 
-    ranking = dados.get(chat_id, {}).get(pista_atual, {})
+    ranking = data.get(chat_id, {}).get(current_track, {})
 
     if not ranking:
-        await update.message.reply_text("Ranking vazio 😴")
+        await update.message.reply_text("Empty ranking 😴")
         return
 
-    ordenado = sorted(ranking.items(), key=lambda x: x[1]["ms"])
+    ordered = sorted(ranking.items(), key=lambda x: x[1]["ms"])
 
-    texto = f"🏆 *RANKING – {pista_atual}*\n\n"
-    for i, (nome, info) in enumerate(ordenado, start=1):
-        texto += f"{i}º {nome} ⏱️ {info['tempo']}\n"
+    text = f"🏆 *RANKING – {current_track}*\n\n"
+    for i, (name, info) in enumerate(ordered, start=1):
+        text += f"{i}º {name} ⏱️ {info['time']}\n"
 
-    await update.message.reply_text(texto, parse_mode="Markdown")
+    await update.message.reply_text(text, parse_mode="Markdown")
 
-async def historico_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def history_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = str(update.effective_chat.id)
-    historico = carregar_historico()
+    history = load_history()
 
-    if chat_id not in historico:
-        await update.message.reply_text("Nenhum histórico ainda 😴")
+    if chat_id not in history:
+        await update.message.reply_text("No history yet 😴")
         return
 
-    texto = "📚 *HISTÓRICO DE EVENTOS*\n\n"
+    text = "📚 *EVENT HISTORY*\n\n"
 
-    for evento in historico[chat_id][-5:]:
-        texto += f"📅 {evento['data']} – {evento['pista']}\n"
-        ranking = sorted(evento["ranking"].items(), key=lambda x: x[1]["ms"])
-        for i, (nome, info) in enumerate(ranking[:3], start=1):
-            medalha = ["🥇", "🥈", "🥉"][i-1]
-            texto += f"{medalha} {nome} ⏱️ {info['tempo']}\n"
-        texto += "\n"
+    for event in history[chat_id][-5:]:
+        text += f"📅 {event['date']} – {event['track']}\n"
+        ranking = sorted(event["ranking"].items(), key=lambda x: x[1]["ms"])
+        for i, (name, info) in enumerate(ranking[:3], start=1):
+            medal = ["🥇", "🥈", "🥉"][i-1]
+            text += f"{medal} {name} ⏱️ {info['time']}\n"
+        text += "\n"
 
-    await update.message.reply_text(texto, parse_mode="Markdown")
+    await update.message.reply_text(text, parse_mode="Markdown")
 
-# ---------------- RESET SEMANAL ----------------
+# -------- /reset --------
 
-async def reset_semanal(app):
-    dados = carregar()
-    historico = carregar_historico()
-    data = datetime.now(FUSO).strftime("%d/%m/%Y")
+async def reset_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await is_admin(update):
+        return
 
-    for chat_id, conteudo in dados.items():
-        pista = conteudo.get("pista_atual")
-        if pista and pista in conteudo:
-            ranking = conteudo[pista]
+    chat_id = str(update.effective_chat.id)
+    data = load_data()
+    current_track = data.get(chat_id, {}).get("current_track")
+
+    if not current_track:
+        await update.message.reply_text("No track to reset.")
+        return
+
+    data[chat_id][current_track] = {}
+    save_data(data)
+
+    await update.message.reply_text(
+        f"🔄 Ranking for *{current_track}* has been reset!",
+        parse_mode="Markdown"
+    )
+
+# ---------------- WEEKLY RESET ----------------
+
+async def weekly_reset(app):
+    data = load_data()
+    history = load_history()
+    date = datetime.now(TIMEZONE).strftime("%d/%m/%Y")
+
+    for chat_id, content in data.items():
+        track_name = content.get("current_track")
+        if track_name and track_name in content:
+            ranking = content[track_name]
             if ranking:
-                historico.setdefault(chat_id, [])
-                historico[chat_id].append({
-                    "data": data,
-                    "pista": pista,
+                history.setdefault(chat_id, [])
+                history[chat_id].append({
+                    "date": date,
+                    "track": track_name,
                     "ranking": ranking
                 })
                 await app.bot.send_message(
                     chat_id=chat_id,
-                    text=f"🔄 Evento encerrado!\nPista: {pista}\nHistórico salvo."
+                    text=f"🔄 Event finished!\nTrack: {track_name}\nHistory saved."
                 )
-        dados[chat_id] = {}
+        data[chat_id] = {}
 
-    salvar(dados)
-    salvar_historico(historico)
+    save_data(data)
+    save_history(history)
 
 # ---------------- MAIN ----------------
 
 def main():
     app = ApplicationBuilder().token(TOKEN).build()
 
-    app.add_handler(CommandHandler("pista", pista))
-    app.add_handler(CommandHandler("tempo", tempo))
+    app.add_handler(CommandHandler("track", track))
+    app.add_handler(CommandHandler("time", time_cmd))
     app.add_handler(CommandHandler("rank", rank))
-    app.add_handler(CommandHandler("historico", historico_cmd))
+    app.add_handler(CommandHandler("history", history_cmd))
+    app.add_handler(CommandHandler("reset", reset_cmd))
 
-    scheduler = BackgroundScheduler(timezone=FUSO)
+    scheduler = BackgroundScheduler(timezone=TIMEZONE)
     scheduler.add_job(
-        lambda: asyncio.run(reset_semanal(app)),
+        lambda: asyncio.run(weekly_reset(app)),
         "cron",
         day_of_week="sat",
         hour=9,
@@ -199,7 +222,7 @@ def main():
     )
     scheduler.start()
 
-    print("Bot iniciado...")
+    print("Bot started...")
     app.run_polling()
 
 if __name__ == "__main__":
