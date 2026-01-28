@@ -79,10 +79,10 @@ async def tempo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     chat_id = str(update.effective_chat.id)
-    user = update.effective_user.first_name
 
     try:
-        tempo_str = context.args[0]
+        nome = context.args[0]
+        tempo_str = context.args[1]
         ms = tempo_para_ms(tempo_str)
 
         dados = carregar()
@@ -96,18 +96,18 @@ async def tempo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         ranking = dados[chat_id][pista_atual]
 
-        if user not in ranking or ms < ranking[user]["ms"]:
-            ranking[user] = {"tempo": tempo_str, "ms": ms}
+        if nome not in ranking or ms < ranking[nome]["ms"]:
+            ranking[nome] = {"tempo": tempo_str, "ms": ms}
             salvar(dados)
             await update.message.reply_text(
-                f"✅ Tempo registrado:\n{user} ⏱️ {tempo_str}"
+                f"✅ Tempo registrado:\n{nome} ⏱️ {tempo_str}"
             )
         else:
             await update.message.reply_text(
-                f"⛔ Tempo maior que o atual.\nSeu melhor: {ranking[user]['tempo']}"
+                f"⛔ Tempo maior que o atual.\nMelhor de {nome}: {ranking[nome]['tempo']}"
             )
     except:
-        await update.message.reply_text("Uso correto:\n/tempo 1:18.732")
+        await update.message.reply_text("Uso correto:\n/tempo Nome 1:18.732")
 
 async def rank(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = str(update.effective_chat.id)
