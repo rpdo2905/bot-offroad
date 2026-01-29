@@ -40,15 +40,15 @@ def save_history(data):
 def time_to_ms(t):
     m, rest = t.split(":")
     s, ms = rest.split(".")
-    return (int(m)*60 + int(s))*1000 + int(ms)
+    return (int(m) * 60 + int(s)) * 1000 + int(ms)
 
 # ---------------- RULES ----------------
 
 async def is_admin(update: Update):
     chat = update.effective_chat
     user = update.effective_user
-    members = await chat.get_administrators()
-    return any(m.user.id == user.id for m in members)
+    admins = await chat.get_administrators()
+    return any(a.user.id == user.id for a in admins)
 
 # ---------------- COMMANDS ----------------
 
@@ -89,9 +89,7 @@ async def time_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         current_track = data.get(chat_id, {}).get("current_track")
 
         if not current_track:
-            await update.message.reply_text(
-                "Set a track first:\n/track Track name"
-            )
+            await update.message.reply_text("Set a track first:\n/track Track name")
             return
 
         ranking = data[chat_id][current_track]
@@ -99,15 +97,61 @@ async def time_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if name not in ranking or ms < ranking[name]["ms"]:
             ranking[name] = {"time": time_str, "ms": ms}
             save_data(data)
-            await update.message.reply_text(
-                f"✅ Time registered:\n{name} ⏱️ {time_str}"
-            )
+            await update.message.reply_text(f"✅ Time registered:\n{name} ⏱️ {time_str}")
         else:
             await update.message.reply_text(
                 f"⛔ Slower than current.\nBest of {name}: {ranking[name]['time']}"
             )
     except:
         await update.message.reply_text("Usage:\n/time Name 1:18.732")
+
+async def delete_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await is_admin(update):
+        return
+
+    chat_id = str(update.effective_chat.id)
+
+    try:
+        name = context.args[0]
+        data = load_data()
+        current_track = data.get(chat_id, {}).get("current_track")
+
+        if not current_track:
+            await update.message.reply_text("No track defined.")
+            return
+
+        ranking = data.get(chat_id, {}).get(current_track, {})
+
+        if name not in ranking:
+            await update.message.reply_text(f"{name} not found in ranking.")
+            return
+
+        del ranking[name]
+        save_data(data)
+
+        await update.message.reply_text(f"🗑️ {name} removed from ranking.")
+    except:
+        await update.message.reply_text("Usage:\n/delete Name")
+
+async def reset_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await is_admin(update):
+        return
+
+    chat_id = str(update.effective_chat.id)
+    data = load_data()
+    current_track = data.get(chat_id, {}).get("current_track")
+
+    if not current_track:
+        await update.message.reply_text("No track to reset.")
+        return
+
+    data[chat_id][current_track] = {}
+    save_data(data)
+
+    await update.message.reply_text(
+        f"🔄 Ranking for *{current_track}* has been reset!",
+        parse_mode="Markdown"
+    )
 
 async def rank(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = str(update.effective_chat.id)
@@ -152,28 +196,6 @@ async def history_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(text, parse_mode="Markdown")
 
-# -------- /reset --------
-
-async def reset_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not await is_admin(update):
-        return
-
-    chat_id = str(update.effective_chat.id)
-    data = load_data()
-    current_track = data.get(chat_id, {}).get("current_track")
-
-    if not current_track:
-        await update.message.reply_text("No track to reset.")
-        return
-
-    data[chat_id][current_track] = {}
-    save_data(data)
-
-    await update.message.reply_text(
-        f"🔄 Ranking for *{current_track}* has been reset!",
-        parse_mode="Markdown"
-    )
-
 # ---------------- WEEKLY RESET ----------------
 
 async def weekly_reset(app):
@@ -208,9 +230,10 @@ def main():
 
     app.add_handler(CommandHandler("track", track))
     app.add_handler(CommandHandler("time", time_cmd))
+    app.add_handler(CommandHandler("delete", delete_cmd))
+    app.add_handler(CommandHandler("reset", reset_cmd))
     app.add_handler(CommandHandler("rank", rank))
     app.add_handler(CommandHandler("history", history_cmd))
-    app.add_handler(CommandHandler("reset", reset_cmd))
 
     scheduler = BackgroundScheduler(timezone=TIMEZONE)
     scheduler.add_job(
