@@ -65,6 +65,17 @@ async def track(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     data = load_data()
     data.setdefault(chat_id, {})
+
+    # 🔒 TRAVA: já existe pista ativa
+    if "current_track" in data[chat_id]:
+        current = data[chat_id]["current_track"]
+        await update.message.reply_text(
+            f"⚠️ A track *{current}* is already active.\n"
+            f"Use /reset to clear it before setting a new track.",
+            parse_mode="Markdown"
+        )
+        return
+
     data[chat_id]["current_track"] = track_name
     data[chat_id].setdefault(track_name, {})
 
@@ -128,7 +139,6 @@ async def delete_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         del ranking[name]
         save_data(data)
-
         await update.message.reply_text(f"🗑️ {name} removed from ranking.")
     except:
         await update.message.reply_text("Usage:\n/delete Name")
@@ -139,18 +149,17 @@ async def reset_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     chat_id = str(update.effective_chat.id)
     data = load_data()
-    current_track = data.get(chat_id, {}).get("current_track")
 
+    current_track = data.get(chat_id, {}).get("current_track")
     if not current_track:
         await update.message.reply_text("No track to reset.")
         return
 
-    data[chat_id][current_track] = {}
+    del data[chat_id]["current_track"]
     save_data(data)
 
     await update.message.reply_text(
-        f"🔄 Ranking for *{current_track}* has been reset!",
-        parse_mode="Markdown"
+        "🔄 Track cleared. You can now set a new track using /track."
     )
 
 async def rank(update: Update, context: ContextTypes.DEFAULT_TYPE):
