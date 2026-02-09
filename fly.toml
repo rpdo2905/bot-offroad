@@ -1,0 +1,16 @@
+app = "offroad-telegram-bot"
+
+primary_region = "gru"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  TZ = "America/Sao_Paulo"
+
+[[services]]
+  internal_port = 8080
+  protocol = "tcp"
+
+  [[services.ports]]
+    port = 80
