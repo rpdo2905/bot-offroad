@@ -236,6 +236,7 @@ async def weekly_reset(app):
 
 def main():
     print("Bot started...")
+
     app = ApplicationBuilder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("track", track))
@@ -255,4 +256,4 @@ def main():
     )
     scheduler.start()
 
-    app.run_polling(close_loop=False)
+    app.run_polling(stop_signals=None)
