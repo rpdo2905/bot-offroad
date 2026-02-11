@@ -1,5 +1,4 @@
 app = "offroad-telegram-bot"
-
 primary_region = "gru"
 
 [build]
@@ -10,3 +9,6 @@ primary_region = "gru"
 
 [processes]
   app = "python bot.py"
+
+[deploy]
+  strategy = "immediate"
