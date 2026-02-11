@@ -12,3 +12,7 @@ primary_region = "gru"
 
 [deploy]
   strategy = "immediate"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = 256
