@@ -10,8 +10,8 @@ from apscheduler.schedulers.background import BackgroundScheduler
 
 # ---------------- CONFIG ----------------
 
-DATA_FILE = "tempos.json"
-HISTORY_FILE = "historico.json"
+DATA_FILE = "/data/tempos.json"
+HISTORY_FILE = "/data/historico.json"
 TOKEN = os.getenv("BOT_TOKEN")
 TIMEZONE = pytz.timezone("America/Sao_Paulo")
 
