@@ -12,7 +12,6 @@ from apscheduler.schedulers.background import BackgroundScheduler
 
 DATA_FILE = "tempos.json"
 HISTORY_FILE = "historico.json"
-META_FILE = "meta.json"
 TOKEN = os.getenv("BOT_TOKEN")
 TIMEZONE = pytz.timezone("America/Sao_Paulo")
 
@@ -36,16 +35,6 @@ def load_history():
 
 def save_history(data):
     with open(HISTORY_FILE, "w") as f:
-        json.dump(data, f, indent=2)
-
-def load_meta():
-    if os.path.exists(META_FILE):
-        with open(META_FILE, "r") as f:
-            return json.load(f)
-    return {}
-
-def save_meta(data):
-    with open(META_FILE, "w") as f:
         json.dump(data, f, indent=2)
 
 def time_to_ms(t):
@@ -88,8 +77,8 @@ async def track(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     data[chat_id]["current_track"] = track_name
     data[chat_id].setdefault(track_name, {})
-
     save_data(data)
+
     await update.message.reply_text(
         f"🏁 Current track set:\n*{track_name}*",
         parse_mode="Markdown"
@@ -176,8 +165,38 @@ async def finish_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update):
         return
 
-    await weekly_reset(context.application)
-    await update.message.reply_text("🏁 Event manually finished and saved.")
+    chat_id = str(update.effective_chat.id)
+    data = load_data()
+    history = load_history()
+    date = datetime.now(TIMEZONE).strftime("%d/%m/%Y")
+
+    current_track = data.get(chat_id, {}).get("current_track")
+
+    if not current_track:
+        await update.message.reply_text("No active track.")
+        return
+
+    ranking = data.get(chat_id, {}).get(current_track, {})
+
+    if not ranking:
+        await update.message.reply_text("No times registered.")
+        return
+
+    history.setdefault(chat_id, [])
+    history[chat_id].append({
+        "date": date,
+        "track": current_track,
+        "ranking": ranking
+    })
+
+    save_history(history)
+
+    data[chat_id] = {}
+    save_data(data)
+
+    await update.message.reply_text(
+        f"🏆 Event finished!\nTrack: {current_track}\nHistory saved."
+    )
 
 async def rank(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = str(update.effective_chat.id)
@@ -222,40 +241,6 @@ async def history_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(text, parse_mode="Markdown")
 
-# ---------------- WEEKLY RESET ----------------
-
-async def weekly_reset(app):
-    data = load_data()
-    history = load_history()
-    meta = load_meta()
-
-    date = datetime.now(TIMEZONE).strftime("%d/%m/%Y")
-
-    for chat_id, content in data.items():
-        track_name = content.get("current_track")
-        if track_name and track_name in content:
-            ranking = content[track_name]
-            if ranking:
-                history.setdefault(chat_id, [])
-                history[chat_id].append({
-                    "date": date,
-                    "track": track_name,
-                    "ranking": ranking
-                })
-
-                await app.bot.send_message(
-                    chat_id=chat_id,
-                    text=f"🔄 Event finished!\nTrack: {track_name}\nHistory saved."
-                )
-
-        data[chat_id] = {}
-
-    meta["last_reset"] = date
-
-    save_data(data)
-    save_history(history)
-    save_meta(meta)
-
 # ---------------- MAIN ----------------
 
 def main():
@@ -268,16 +253,6 @@ def main():
     app.add_handler(CommandHandler("finish", finish_cmd))
     app.add_handler(CommandHandler("rank", rank))
     app.add_handler(CommandHandler("history", history_cmd))
-
-    scheduler = BackgroundScheduler(timezone=TIMEZONE)
-    scheduler.add_job(
-        lambda: asyncio.run(weekly_reset(app)),
-        "cron",
-        day_of_week="sat",
-        hour=9,
-        minute=0
-    )
-    scheduler.start()
 
     print("Bot started...")
     app.run_polling()
