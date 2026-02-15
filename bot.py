@@ -38,6 +38,16 @@ def save_history(data):
     with open(HISTORY_FILE, "w") as f:
         json.dump(data, f, indent=2)
 
+def load_meta():
+    if os.path.exists(META_FILE):
+        with open(META_FILE, "r") as f:
+            return json.load(f)
+    return {}
+
+def save_meta(data):
+    with open(META_FILE, "w") as f:
+        json.dump(data, f, indent=2)
+
 def time_to_ms(t):
     m, rest = t.split(":")
     s, ms = rest.split(".")
@@ -67,7 +77,6 @@ async def track(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = load_data()
     data.setdefault(chat_id, {})
 
-    # 🔒 TRAVA: já existe pista ativa
     if "current_track" in data[chat_id]:
         current = data[chat_id]["current_track"]
         await update.message.reply_text(
@@ -163,6 +172,13 @@ async def reset_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "🔄 Track cleared. You can now set a new track using /track."
     )
 
+async def finish_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await is_admin(update):
+        return
+
+    await weekly_reset(context.application)
+    await update.message.reply_text("🏁 Event manually finished and saved.")
+
 async def rank(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = str(update.effective_chat.id)
     data = load_data()
@@ -211,6 +227,8 @@ async def history_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def weekly_reset(app):
     data = load_data()
     history = load_history()
+    meta = load_meta()
+
     date = datetime.now(TIMEZONE).strftime("%d/%m/%Y")
 
     for chat_id, content in data.items():
@@ -224,26 +242,30 @@ async def weekly_reset(app):
                     "track": track_name,
                     "ranking": ranking
                 })
+
                 await app.bot.send_message(
                     chat_id=chat_id,
                     text=f"🔄 Event finished!\nTrack: {track_name}\nHistory saved."
                 )
+
         data[chat_id] = {}
+
+    meta["last_reset"] = date
 
     save_data(data)
     save_history(history)
+    save_meta(meta)
 
 # ---------------- MAIN ----------------
 
 def main():
-    print("Bot started...")
-
     app = ApplicationBuilder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("track", track))
     app.add_handler(CommandHandler("time", time_cmd))
     app.add_handler(CommandHandler("delete", delete_cmd))
     app.add_handler(CommandHandler("reset", reset_cmd))
+    app.add_handler(CommandHandler("finish", finish_cmd))
     app.add_handler(CommandHandler("rank", rank))
     app.add_handler(CommandHandler("history", history_cmd))
 
@@ -257,4 +279,8 @@ def main():
     )
     scheduler.start()
 
-    app.run_polling(stop_signals=None)
+    print("Bot started...")
+    app.run_polling()
+
+if __name__ == "__main__":
+    main()
