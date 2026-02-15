@@ -162,6 +162,7 @@ async def reset_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def finish_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    print("FINISH COMMAND CALLED")
     if not await is_admin(update):
         return
 
